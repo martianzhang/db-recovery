@@ -18,9 +18,15 @@ func init() {
 	_, filename, _, _ := runtime.Caller(0)
 	devPath = filepath.Dir(filepath.Dir(filepath.Dir(filename)))
 	fixturePath = devPath + "/cmd/test/fixture/" + *mysqlRelease + "_" + *mysqlVersion
+
+	// set logs to stderr, and log-level = trace
+	flag.Set("logtostderr", "true")
+	flag.Set("v", "5")
 }
 
+// go test -v -timeout 30s -run ^TestParse$ github.com/zbdba/db-recovery/recovery/ibdata > TestParse.log 2>&1
 func TestParse(t *testing.T) {
+	flag.Set("v", "3")
 	err := p.ParseDictPage(fixturePath + "/ibdata1")
 	if err != nil {
 		t.Error(err.Error())
@@ -30,6 +36,7 @@ func TestParse(t *testing.T) {
 	if err != nil {
 		t.Error(err.Error())
 	}
+	flag.Set("v", "5")
 }
 
 func TestParseFile(t *testing.T) {

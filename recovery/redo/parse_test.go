@@ -25,6 +25,7 @@ func init() {
 	flag.Set("v", "5")
 }
 
+// go test -v -timeout 30s -run ^TestParseRedoLogs$ github.com/zbdba/db-recovery/recovery/redo > TestParseRedoLogs.log 2>&1
 func TestParseRedoLogs(t *testing.T) {
 	flag.Set("v", "3")
 	err := p.ParseDictPage(fixturePath + "/ibdata1")

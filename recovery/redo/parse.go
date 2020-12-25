@@ -15,6 +15,7 @@
 package redo
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 
@@ -156,15 +157,20 @@ func (parse *Parse) readRedoLogFileHeader(file *os.File) error {
 	}
 
 	logHeaderFormat := utils.MatchReadFrom4(data[pos:])
-	logs.Debug("LOG_HEADER_FORMAT: ", logHeaderFormat)
 	pos += 4
 
 	logHeaderPAD1 := utils.MatchReadFrom4(data[pos:])
-	logs.Debug("LOG_HEADER_PAD1: ", logHeaderPAD1)
 	pos += 4
 
 	logHeaderStartLsn := utils.MatchReadFrom8(data[pos:])
-	logs.Debug("LOG_HEADER_START_LSN: ", logHeaderStartLsn)
+	pos += 8
+
+	creator := data[pos : bytes.IndexByte(data[pos:], 0x00)+pos]
+	pos += 32 // 32 bytes, NULL terminated string, filled with NULL bytes
+
+	checksum := data[OS_FILE_LOG_BLOCK_SIZE-LOG_BLOCK_TRL_SIZE:]
+	logs.Debug("RedoLogHeader LOG_HEADER_FORMAT:", logHeaderFormat, "LOG_HEADER_PAD1:", logHeaderPAD1,
+		"LOG_HEADER_START_LSN:", logHeaderStartLsn, "LOG_HEADER_CREATOR:", string(creator), "CHECKSUM:", checksum)
 
 	return err
 }
@@ -200,7 +206,7 @@ func (parse *Parse) readRedoLogFileCheckpoint(file *os.File) error {
 
 // readRedoBlockHeader read redo log block header.
 //	| block number(4bytes) | block data length(2bytes) | first record offset(2bytes) | checkpoint number(4bytes) |
-//	| log record1 ... | log recordN | free space | checksum(4bytes)
+//	| log record1          | ...                       | log recordN | free space ...         | checksum(4bytes) |
 // log block header is 12 bytes length
 // log block size also 512 bytes
 // last 4 bytes is checksum
@@ -260,7 +266,6 @@ func (parse *Parse) parseRedoBlockData(data []byte) error {
 		logType = uint64(int(logType) & ^MLOG_SINGLE_REC_FLAG)
 
 		if logType != MLOG_CHECKPOINT {
-
 			// Get space id
 			spaceID, num, err := utils.MatchParseCompressed(data, pos)
 			pos += num
