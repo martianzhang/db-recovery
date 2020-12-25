@@ -19,6 +19,16 @@ const (
 	// storage/innobase/include/os0file.h
 	// #define OS_FILE_LOG_BLOCK_SIZE 512
 	OS_FILE_LOG_BLOCK_SIZE = 512
+
+	// storage/innobase/include/log0log.h
+	// /** Size of the log block's header in bytes. */
+	// constexpr uint32_t LOG_BLOCK_HDR_SIZE = 12;
+	LOG_BLOCK_HDR_SIZE = 12
+
+	// storage/innobase/include/log0log.h
+	// /** Size of the log block footer (trailer) in bytes. */
+	// constexpr uint32_t LOG_BLOCK_TRL_SIZE = 4;
+	LOG_BLOCK_TRL_SIZE = 4
 )
 
 // The MySQL Innodb redo record type.

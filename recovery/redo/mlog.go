@@ -25,6 +25,7 @@ import (
 
 // MLOG_N_BYTES ...
 func (parse *Parse) mlogNBytes(data []byte, pos *uint64, myType uint64) error {
+	logs.Debug("start parse MLOG_N_BYTES: MLOG_1BYTE, MLOG_2BYTES, MLOG_4BYTES, MLOG_8BYTES log record")
 
 	offset := utils.MatchReadFrom2(data[*pos:])
 	logs.Debug("offset is", offset, "pos is ", *pos, " data len is ", len(data))
@@ -55,6 +56,7 @@ func (parse *Parse) mlogNBytes(data []byte, pos *uint64, myType uint64) error {
 
 // MLOG_REC_SEC_DELETE_MARK ...
 func (parse *Parse) mlogRecSecDeleteMark(data []byte, pos *uint64) {
+	logs.Debug("start parse MLOG_REC_SEC_DELETE_MARK log record")
 
 	value := utils.MatchReadFrom1(data[*pos:])
 	*pos++
@@ -69,6 +71,7 @@ func (parse *Parse) mlogRecSecDeleteMark(data []byte, pos *uint64) {
 
 // MLOG_UNDO_INSERT ...
 func (parse *Parse) mlogUndoInsert(data []byte, pos *uint64) error {
+	logs.Debug("start parse MLOG_UNDO_INSERT log record")
 
 	dataLen := utils.MatchReadFrom2(data[*pos:])
 	*pos += 2
@@ -316,6 +319,8 @@ func (parse *Parse) getTableByTableID(tableID uint64) (ibdata.Tables, error) {
 
 // MLOG_UNDO_INIT ...
 func (parse *Parse) mlogUndoInit(data []byte, pos *uint64) error {
+	logs.Debug("start parse MLOG_UNDO_INIT log record")
+
 	_, num, err := utils.MatchParseCompressed(data, *pos)
 	if err != nil {
 		return err
@@ -327,11 +332,15 @@ func (parse *Parse) mlogUndoInit(data []byte, pos *uint64) error {
 
 // MLOG_UNDO_HDR_REUSE ...
 func (parse *Parse) mlogUndoHdrReuse(data []byte, pos *uint64) {
+	logs.Debug("start parse MLOG_UNDO_HDR_REUSE log record")
+
 	utils.MatchUllReadComPressed(data, pos)
 }
 
 // MLOG_UNDO_HDR_CREATE ...
 func (parse *Parse) mlogUndoHdrCreate(data []byte, pos *uint64) error {
+	logs.Debug("start parse MLOG_UNDO_HDR_CREATE log record")
+
 	value, _, err := utils.MatchParseCompressed(data, *pos)
 	if err != nil {
 		logs.Error("parse MLOG_UNDO_HDR_CREATE failed, the error is ", err.Error())
@@ -350,6 +359,7 @@ func (parse *Parse) mlogUndoHdrCreate(data []byte, pos *uint64) error {
 
 // MLOG_WRITE_STRING ...
 func (parse *Parse) mlogWriteString(data []byte, pos *uint64) {
+	logs.Debug("start parse MLOG_WRITE_STRING log record")
 
 	// Parses a log record written by mlog_write_string
 	offset := utils.MatchReadFrom2(data[*pos:])
@@ -383,6 +393,8 @@ func (parse *Parse) mlogRecMark(data []byte, pos uint64) {
 
 // MLOG_REC_INSERT ...
 func (parse *Parse) mlogRecInsert(data []byte, pos *uint64, myType uint64) error {
+	logs.Debug("start parse MLOG_REC_INSERT, MLOG_COMP_REC_INSERT log record")
+
 	position, err := utils.ParseIndex(myType == MLOG_COMP_REC_INSERT, data, *pos)
 	if err != nil {
 		return err
@@ -404,6 +416,7 @@ func (parse *Parse) mlogRecInsert(data []byte, pos *uint64, myType uint64) error
 
 // MLOG_REC_CLUST_DELETE_MARK ...
 func (parse *Parse) mlogRecClustDeleteMark(data []byte, pos *uint64, myType uint64) error {
+	logs.Debug("start parse MLOG_REC_CLUST_DELETE_MARK, MLOG_COMP_REC_CLUST_DELETE_MARK log record")
 
 	position, err := utils.ParseIndex(myType == MLOG_COMP_REC_CLUST_DELETE_MARK, data, *pos)
 	if err != nil {
@@ -447,6 +460,8 @@ func (parse *Parse) mlogRecClustDeleteMark(data []byte, pos *uint64, myType uint
 
 // MLOG_COMP_REC_SEC_DELETE_MARK ...
 func (parse *Parse) mlogCompRecSecDeleteMark(data []byte, pos *uint64) error {
+	logs.Debug("start parse MLOG_COMP_REC_SEC_DELETE_MARK log record")
+
 	position, err := utils.ParseIndex(true, data, *pos)
 	if err == nil {
 		*pos = position
@@ -456,6 +471,7 @@ func (parse *Parse) mlogCompRecSecDeleteMark(data []byte, pos *uint64) error {
 
 // MLOG_REC_UPDATE_IN_PLACE ...
 func (parse *Parse) mlogRecUpdateInPlace(data []byte, pos *uint64, MyType uint64) error {
+	logs.Debug("start parse MLOG_REC_UPDATE_IN_PLACE, MLOG_COMP_REC_UPDATE_IN_PLACE log record")
 
 	// Catch panic
 	defer func() {
@@ -532,6 +548,8 @@ func (parse *Parse) mlogRecUpdateInPlace(data []byte, pos *uint64, MyType uint64
 
 // MLOG_REC_DELETE ...
 func (parse *Parse) mlogRecDelete(data []byte, pos *uint64, MyType uint64) error {
+	logs.Debug("start parse MLOG_REC_DELETE, MLOG_COMP_REC_DELETE log record")
+
 	position, err := utils.ParseIndex(MyType == MLOG_COMP_REC_DELETE, data, *pos)
 	if err == nil {
 		*pos = position
@@ -549,6 +567,9 @@ func (parse *Parse) mlogRecDelete(data []byte, pos *uint64, MyType uint64) error
 
 // MLOG_LIST_DELETE ...
 func (parse *Parse) mlogListDelete(data []byte, pos *uint64, myType uint64) error {
+	logs.Debug("start parse MLOG_LIST_END_DELETE, MLOG_COMP_LIST_END_DELETE, " +
+		"MLOG_LIST_START_DELETE, MLOG_COMP_LIST_START_DELETE log record")
+
 	position, err := utils.ParseIndex(myType == MLOG_COMP_LIST_START_DELETE ||
 		myType == MLOG_COMP_LIST_END_DELETE, data, *pos)
 	if err == nil {
@@ -567,6 +588,7 @@ func (parse *Parse) mlogListDelete(data []byte, pos *uint64, myType uint64) erro
 
 // MLOG_LIST_END_COPY_CREATED ...
 func (parse *Parse) mlogListEndCopyCreated(data []byte, pos *uint64, myType uint64) error {
+	logs.Debug("start parse MLOG_LIST_END_COPY_CREATED, MLOG_COMP_LIST_END_COPY_CREATED log record")
 
 	position, err := utils.ParseIndex(myType == MLOG_COMP_LIST_END_COPY_CREATED, data, *pos)
 	if err != nil {
@@ -613,6 +635,7 @@ func (parse *Parse) mlogListEndCopyCreated(data []byte, pos *uint64, myType uint
 
 // MLOG_PAGE_REORGANIZE ...
 func (parse *Parse) mlogPageReorganize(data []byte, pos *uint64, myType uint64) error {
+	logs.Debug("start parse MLOG_PAGE_REORGANIZE, MLOG_COMP_PAGE_REORGANIZE, MLOG_ZIP_PAGE_REORGANIZE log record")
 
 	position, err := utils.ParseIndex(myType != MLOG_PAGE_REORGANIZE, data, *pos)
 	if err == nil {
@@ -629,6 +652,7 @@ func (parse *Parse) mlogPageReorganize(data []byte, pos *uint64, myType uint64) 
 
 // MLOG_ZIP_WRITE_NODE_PTR ...
 func (parse *Parse) mlogZipWriteNodePtr(data []byte, pos *uint64) {
+	logs.Debug("start parse MLOG_ZIP_WRITE_NODE_PTR log record")
 
 	// TODO: confirm.
 
@@ -650,6 +674,8 @@ func (parse *Parse) mlogZipWriteBlobPtr(data []byte, pos uint64) {
 
 // MLOG_ZIP_WRITE_HEADER ...
 func (parse *Parse) mlogZipWriteHeader(data []byte, pos *uint64) {
+	logs.Debug("start parse MLOG_ZIP_WRITE_HEADER log record")
+
 	// TODO: confirm.
 
 	offset := uint64(data[*pos:][0])
@@ -664,6 +690,8 @@ func (parse *Parse) mlogZipWriteHeader(data []byte, pos *uint64) {
 
 // MLOG_ZIP_PAGE_COMPRESS ...
 func (parse *Parse) mlogZipPageCompress(data []byte, pos *uint64) {
+	logs.Debug("start parse MLOG_ZIP_PAGE_COMPRESS log record")
+
 	size := utils.MatchReadFrom2(data[*pos:])
 	*pos += 2
 	trailerSize := utils.MatchReadFrom2(data[*pos:])
@@ -675,6 +703,8 @@ func (parse *Parse) mlogZipPageCompress(data []byte, pos *uint64) {
 
 // MLOG_ZIP_PAGE_COMPRESS_NO_DATA ...
 func (parse *Parse) mlogZipPageCompressNoData(data []byte, pos *uint64) error {
+	logs.Debug("start parse MLOG_ZIP_PAGE_COMPRESS_NO_DATA log record")
+
 	// TODO: confirm.
 
 	position, err := utils.ParseIndex(true, data, *pos)

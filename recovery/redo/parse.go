@@ -88,7 +88,6 @@ func (parse *Parse) ParseRedoLogs(logFileList []string) error {
 		// parse left redo log block
 		for {
 			// when parsing the redo log file, record the read position.
-			var pos uint64
 			block, err := utils.ReadNextBytes(file, OS_FILE_LOG_BLOCK_SIZE)
 			if err != nil {
 				break
@@ -96,32 +95,18 @@ func (parse *Parse) ParseRedoLogs(logFileList []string) error {
 
 			// Parse the redo block blockHeader.
 			// The redo block consists of redo log blockHeader and redo log data.
-			blockHeader, err := parse.readRedoBlockHeader(&pos, block)
+			blockHeader, err := parse.readRedoBlockHeader(block)
 			if err != nil || blockHeader.BlockDataLen == 0 {
 				break
 			}
 
 			// LOG_BLOCK_TRL_SIZE, for checksum.
 			if blockHeader.BlockDataLen >= OS_FILE_LOG_BLOCK_SIZE {
-				// TODO: const
-				blockHeader.BlockDataLen -= 4
-			}
-
-			// Sometimes the first block may not be the beginning of the log record,
-			// it may be the end of the previous log record. we will make an error
-			// when we parse directly. At this time, we will start parsing directly
-			// from the position specified by first record. If first record
-			// is equal to 0, this block is used by all previous log records, we just skip it.
-			if len(data) == 0 && blockHeader.FirstRecOffset == 0 {
-				continue
-			}
-
-			if len(data) == 0 && blockHeader.FirstRecOffset > 12 {
-				pos += uint64(blockHeader.FirstRecOffset) - 12
+				blockHeader.BlockDataLen -= LOG_BLOCK_TRL_SIZE
 			}
 
 			// Add all redo block data.
-			data = append(data, block[pos:blockHeader.BlockDataLen]...)
+			data = append(data, block[LOG_BLOCK_HDR_SIZE:blockHeader.BlockDataLen]...)
 		}
 		file.Close()
 	}
@@ -219,19 +204,20 @@ func (parse *Parse) readRedoLogFileCheckpoint(file *os.File) error {
 // log block header is 12 bytes length
 // log block size also 512 bytes
 // last 4 bytes is checksum
-func (parse *Parse) readRedoBlockHeader(pos *uint64, data []byte) (BlockHeader, error) {
+func (parse *Parse) readRedoBlockHeader(data []byte) (BlockHeader, error) {
 
+	var pos uint64
 	logBlockNo := utils.MatchReadFrom4(data)
-	*pos += 4
+	pos += 4
 
-	dataLen := utils.MatchReadFrom2(data[*pos:])
-	*pos += 2
+	dataLen := utils.MatchReadFrom2(data[pos:])
+	pos += 2
 
-	firstRecord := utils.MatchReadFrom2(data[*pos:])
-	*pos += 2
+	firstRecord := utils.MatchReadFrom2(data[pos:])
+	pos += 2
 
-	checkpointNo := utils.MatchReadFrom4(data[*pos:])
-	*pos += 4
+	checkpointNo := utils.MatchReadFrom4(data[pos:])
+	pos += 4
 
 	logs.Debugf("RedoBlockHeader logBlockNo: %d, dataLen: %d, firstRecord: %d, checkpointNo: %d\n",
 		logBlockNo, dataLen, firstRecord, checkpointNo)
@@ -311,20 +297,15 @@ func (parse *Parse) parseRedoBlockData(data []byte) error {
 		switch logType {
 
 		case MLOG_1BYTE, MLOG_2BYTES, MLOG_4BYTES, MLOG_8BYTES:
-			logs.Debug("start parse MLOG_1BYTE, MLOG_2BYTES, MLOG_4BYTES, MLOG_8BYTES log record")
-			err := parse.mlogNBytes(data, &pos, logType)
-			if err != nil {
+			if err := parse.mlogNBytes(data, &pos, logType); err != nil {
 				break
 			}
 
 		case MLOG_REC_SEC_DELETE_MARK:
-			logs.Debug("start parse MLOG_REC_SEC_DELETE_MARK log record")
 			parse.mlogRecSecDeleteMark(data, &pos)
 
 		case MLOG_UNDO_INSERT:
-			logs.Debug("start parse MLOG_UNDO_INSERT log record")
-			err := parse.mlogUndoInsert(data, &pos)
-			if err != nil {
+			if err := parse.mlogUndoInsert(data, &pos); err != nil {
 				break
 			}
 
@@ -333,9 +314,7 @@ func (parse *Parse) parseRedoBlockData(data []byte) error {
 			continue
 
 		case MLOG_UNDO_INIT:
-			logs.Debug("start parse MLOG_UNDO_INIT log record")
-			err := parse.mlogUndoInit(data, &pos)
-			if err != nil {
+			if err := parse.mlogUndoInit(data, &pos); err != nil {
 				break
 			}
 		case MLOG_UNDO_HDR_DISCARD:
@@ -343,13 +322,10 @@ func (parse *Parse) parseRedoBlockData(data []byte) error {
 			continue
 
 		case MLOG_UNDO_HDR_REUSE:
-			logs.Debug("start parse MLOG_UNDO_HDR_REUSE log record")
 			parse.mlogUndoHdrReuse(data, &pos)
 
 		case MLOG_UNDO_HDR_CREATE:
-			logs.Debug("start parse MLOG_UNDO_HDR_CREATE log record")
-			err := parse.mlogUndoHdrCreate(data, &pos)
-			if err != nil {
+			if err := parse.mlogUndoHdrCreate(data, &pos); err != nil {
 				break
 			}
 
@@ -358,12 +334,10 @@ func (parse *Parse) parseRedoBlockData(data []byte) error {
 			continue
 
 		case MLOG_INIT_FILE_PAGE, MLOG_INIT_FILE_PAGE2:
-			logs.Debug("start parse MLOG_INIT_FILE_PAGE or " +
-				"MLOG_INIT_FILE_PAGE2 log record")
+			logs.Debug("start parse MLOG_INIT_FILE_PAGE or MLOG_INIT_FILE_PAGE2 log record")
 			continue
 
 		case MLOG_WRITE_STRING:
-			logs.Debug("start parse MLOG_WRITE_STRING log record")
 			parse.mlogWriteString(data, &pos)
 
 		case MLOG_MULTI_REC_END:
@@ -377,8 +351,7 @@ func (parse *Parse) parseRedoBlockData(data []byte) error {
 		case MLOG_FILE_RENAME, MLOG_FILE_CREATE,
 			MLOG_FILE_DELETE, MLOG_FILE_CREATE2,
 			MLOG_FILE_RENAME2, MLOG_FILE_NAME:
-			logs.Debug("start parse MLOG_FILE_RENAME, MLOG_FILE_CREATE, " +
-				"MLOG_FILE_DELETE, MLOG_FILE_CREATE2 log record")
+			logs.Debug("start parse MLOG_FILE_RENAME, MLOG_FILE_CREATE, MLOG_FILE_DELETE, MLOG_FILE_CREATE2 log record")
 			parse.mlogFileOp(data, &pos, logType)
 
 		case MLOG_REC_MIN_MARK, MLOG_COMP_REC_MIN_MARK:
@@ -390,68 +363,46 @@ func (parse *Parse) parseRedoBlockData(data []byte) error {
 			continue
 
 		case MLOG_REC_INSERT, MLOG_COMP_REC_INSERT:
-			logs.Debug("start parse MLOG_REC_INSERT, MLOG_COMP_REC_INSERT log record")
-			err := parse.mlogRecInsert(data, &pos, logType)
-			if err != nil {
+			if err := parse.mlogRecInsert(data, &pos, logType); err != nil {
 				return err
 			}
 
 		case MLOG_REC_CLUST_DELETE_MARK, MLOG_COMP_REC_CLUST_DELETE_MARK:
-			logs.Debug("start parse MLOG_REC_CLUST_DELETE_MARK, MLOG_COMP_REC_CLUST_DELETE_MARK log record")
-			err := parse.mlogRecClustDeleteMark(data, &pos, logType)
-			if err != nil {
+			if err := parse.mlogRecClustDeleteMark(data, &pos, logType); err != nil {
 				break
 			}
 
 		case MLOG_COMP_REC_SEC_DELETE_MARK:
-			logs.Debug("start parse MLOG_COMP_REC_SEC_DELETE_MARK log record")
-			err := parse.mlogCompRecSecDeleteMark(data, &pos)
-			if err != nil {
+			if err := parse.mlogCompRecSecDeleteMark(data, &pos); err != nil {
 				break
 			}
 
 		case MLOG_REC_UPDATE_IN_PLACE, MLOG_COMP_REC_UPDATE_IN_PLACE:
-			logs.Debug("start parse MLOG_REC_UPDATE_IN_PLACE, MLOG_COMP_REC_UPDATE_IN_PLACE log record")
-			err := parse.mlogRecUpdateInPlace(data, &pos, logType)
-			if err != nil {
+			if err := parse.mlogRecUpdateInPlace(data, &pos, logType); err != nil {
 				break
 			}
 
 		case MLOG_REC_DELETE, MLOG_COMP_REC_DELETE:
-			logs.Debug("start parse MLOG_REC_DELETE, MLOG_COMP_REC_DELETE log record")
-			err := parse.mlogRecDelete(data, &pos, logType)
-			if err != nil {
+			if err := parse.mlogRecDelete(data, &pos, logType); err != nil {
 				break
 			}
 
-		case MLOG_LIST_END_DELETE,
-			MLOG_COMP_LIST_END_DELETE,
-			MLOG_LIST_START_DELETE,
-			MLOG_COMP_LIST_START_DELETE:
-			logs.Debug("start parse MLOG_LIST_END_DELETE,MLOG_COMP_LIST_END_DELETE," +
-				"MLOG_LIST_START_DELETE,MLOG_COMP_LIST_START_DELETE log record")
-			err := parse.mlogListDelete(data, &pos, logType)
-			if err != nil {
+		case MLOG_LIST_END_DELETE, MLOG_COMP_LIST_END_DELETE, MLOG_LIST_START_DELETE, MLOG_COMP_LIST_START_DELETE:
+			if err := parse.mlogListDelete(data, &pos, logType); err != nil {
 				break
 			}
 
 		case MLOG_LIST_END_COPY_CREATED, MLOG_COMP_LIST_END_COPY_CREATED:
-			logs.Debug("start parse MLOG_LIST_END_COPY_CREATED, MLOG_COMP_LIST_END_COPY_CREATED log record")
-			err := parse.mlogListEndCopyCreated(data, &pos, logType)
-			if err != nil {
+			if err := parse.mlogListEndCopyCreated(data, &pos, logType); err != nil {
 				break
 			}
 
 		case MLOG_PAGE_REORGANIZE, MLOG_COMP_PAGE_REORGANIZE, MLOG_ZIP_PAGE_REORGANIZE:
-			logs.Debug("start parse MLOG_PAGE_REORGANIZE, MLOG_COMP_PAGE_REORGANIZE, " +
-				"MLOG_ZIP_PAGE_REORGANIZE log record")
-			err := parse.mlogPageReorganize(data, &pos, logType)
-			if err != nil {
+			if err := parse.mlogPageReorganize(data, &pos, logType); err != nil {
 				break
 			}
 
 		case MLOG_ZIP_WRITE_NODE_PTR:
-			logs.Debug("start parse MLOG_ZIP_WRITE_NODE_PTR log record")
 			parse.mlogZipWriteNodePtr(data, &pos)
 
 		case MLOG_ZIP_WRITE_BLOB_PTR:
@@ -459,36 +410,35 @@ func (parse *Parse) parseRedoBlockData(data []byte) error {
 			pos += 24
 
 		case MLOG_ZIP_WRITE_HEADER:
-			logs.Debug("start parse MLOG_ZIP_WRITE_HEADER log record")
 			parse.mlogZipWriteHeader(data, &pos)
 
 		case MLOG_ZIP_PAGE_COMPRESS:
-			logs.Debug("start parse MLOG_ZIP_PAGE_COMPRESS log record")
 			parse.mlogZipPageCompress(data, &pos)
 
 		case MLOG_ZIP_PAGE_COMPRESS_NO_DATA:
-			logs.Debug("start parse MLOG_ZIP_PAGE_COMPRESS_NO_DATA log record")
-			err := parse.mlogZipPageCompressNoData(data, &pos)
-			if err != nil {
+			if err := parse.mlogZipPageCompressNoData(data, &pos); err != nil {
 				break
 			}
 
 		case MLOG_CHECKPOINT:
-			logs.Debug("start prase MLOG_CHECKPOINT")
+			logs.Debug("start parse MLOG_CHECKPOINT")
 			pos += 8
 			break
+
 		case MLOG_COMP_PAGE_CREATE_RTREE, MLOG_PAGE_CREATE_RTREE:
-			logs.Debug("start prase MLOG_COMP_PAGE_CREATE_RTREE " +
-				"or MLOG_PAGE_CREATE_RTREE")
+			logs.Debug("start parse MLOG_COMP_PAGE_CREATE_RTREE or MLOG_PAGE_CREATE_RTREE")
 			break
+
 		case MLOG_TRUNCATE:
-			logs.Debug("start prase MLOG_TRUNCATE")
+			logs.Debug("start parse MLOG_TRUNCATE")
 			pos += 8
 			break
+
 		case MLOG_INDEX_LOAD:
-			logs.Debug("start prase MLOG_INDEX_LOAD")
+			logs.Debug("start parse MLOG_INDEX_LOAD")
 			pos += 8
 			break
+
 		default:
 			logs.Debug("unknown rMLOG_REC_UPDATE_IN_PLACEedo type, break.")
 			break
