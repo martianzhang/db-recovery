@@ -79,3 +79,11 @@ type LogBlock struct {
 	//  as LOG_BLOCK_HDR_NO [20].  Table IV
 	Checksum uint32
 }
+
+// BlockHeader redo log block header
+type BlockHeader struct {
+	BlockNumber    uint32
+	BlockDataLen   uint16
+	FirstRecOffset uint16
+	CheckpointNum  uint32
+}

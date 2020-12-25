@@ -16,11 +16,11 @@ package redo
 
 import (
 	"fmt"
+	"os"
+
 	"github.com/zbdba/db-recovery/recovery/ibdata"
 	"github.com/zbdba/db-recovery/recovery/logs"
 	"github.com/zbdba/db-recovery/recovery/utils"
-	"io"
-	"os"
 )
 
 // https://dev.mysql.com/doc/dev/mysql-server/8.0.11/PAGE_INNODB_REDO_LOG_FORMAT.html
@@ -59,10 +59,13 @@ func (parse *Parse) ParseDictPage(ibdataPath string) error {
 // The redo log file have four parts:
 // 1. redo log header
 // 2. checkpoint 1
-// 3. checkpoint 2
-// 4. redo block
-// And every parts is 512 bytes, there will be many
-// redo blocks which store the redo record.
+// 3. empty block
+// 4. checkpoint 2
+// 5. redo block ...
+// And every parts is 512 bytes, there will be many, redo blocks which store the redo record.
+// reference:
+//	* https://dev.mysql.com/doc/dev/mysql-server/8.0.11/PAGE_INNODB_REDO_LOG_FORMAT.html
+//	* http://mysql.taobao.org/monthly/2017/09/07/
 func (parse *Parse) ParseRedoLogs(logFileList []string) error {
 	var data []byte
 	for _, LogFile := range logFileList {
@@ -72,43 +75,36 @@ func (parse *Parse) ParseRedoLogs(logFileList []string) error {
 			return err
 		}
 
-		// Parse read redo log header
-		if err = parse.readHeader(file); err != nil {
+		// parse redo log header
+		if err = parse.readRedoLogFileHeader(file); err != nil {
 			return err
 		}
 
-		// Parse read redo log checkpoint
-		if err = parse.readCheckpoint(file); err != nil {
+		// parse redo log checkpoint
+		if err = parse.readRedoLogFileCheckpoint(file); err != nil {
 			return err
 		}
 
-		// Move to the start of the logs
-		// Current position is 512 + 512 + 512 = 1536 and logs start at 2048
-		if pos, err := file.Seek(OS_FILE_LOG_BLOCK_SIZE, io.SeekCurrent); err == nil {
-			logs.Debug("Current position: ", pos)
-		} else {
-			return err
-		}
-
+		// parse left redo log block
 		for {
-			// When parsing the redo log file, record the read position.
+			// when parsing the redo log file, record the read position.
 			var pos uint64
-			d, err := utils.ReadNextBytes(file, OS_FILE_LOG_BLOCK_SIZE)
+			block, err := utils.ReadNextBytes(file, OS_FILE_LOG_BLOCK_SIZE)
 			if err != nil {
 				break
 			}
 
-			// Parse the redo block header.
-			// The redo block consists of redo log header and redo log data.
-			dataLen, firstRecord, readErr := parse.readRedoBlockHeader(&pos, d)
-			if readErr != nil || dataLen == 0 {
+			// Parse the redo block blockHeader.
+			// The redo block consists of redo log blockHeader and redo log data.
+			blockHeader, err := parse.readRedoBlockHeader(&pos, block)
+			if err != nil || blockHeader.BlockDataLen == 0 {
 				break
 			}
 
 			// LOG_BLOCK_TRL_SIZE, for checksum.
-			if dataLen >= OS_FILE_LOG_BLOCK_SIZE {
+			if blockHeader.BlockDataLen >= OS_FILE_LOG_BLOCK_SIZE {
 				// TODO: const
-				dataLen -= 4
+				blockHeader.BlockDataLen -= 4
 			}
 
 			// Sometimes the first block may not be the beginning of the log record,
@@ -116,16 +112,16 @@ func (parse *Parse) ParseRedoLogs(logFileList []string) error {
 			// when we parse directly. At this time, we will start parsing directly
 			// from the position specified by first record. If first record
 			// is equal to 0, this block is used by all previous log records, we just skip it.
-			if len(data) == 0 && firstRecord == uint64(0) {
+			if len(data) == 0 && blockHeader.FirstRecOffset == 0 {
 				continue
 			}
 
-			if len(data) == 0 && firstRecord > 12 {
-				pos += firstRecord - 12
+			if len(data) == 0 && blockHeader.FirstRecOffset > 12 {
+				pos += uint64(blockHeader.FirstRecOffset) - 12
 			}
 
 			// Add all redo block data.
-			data = append(data, d[pos:dataLen]...)
+			data = append(data, block[pos:blockHeader.BlockDataLen]...)
 		}
 		file.Close()
 	}
@@ -136,6 +132,118 @@ func (parse *Parse) ParseRedoLogs(logFileList []string) error {
 		logs.Error("parse redo block data failed, error: ", err.Error())
 	}
 	return err
+}
+
+//	storage/innobase/include/log0log.ic
+//
+//	void meb_log_print_file_hdr(byte *block) {
+//	  ib::info(ER_IB_MSG_626) << "Log file header:"
+//	                          << " format "
+//	                          << mach_read_from_4(block + LOG_HEADER_FORMAT)
+//	                          << " pad1 "
+//	                          << mach_read_from_4(block + LOG_HEADER_PAD1)
+//	                          << " start_lsn "
+//	                          << mach_read_from_8(block + LOG_HEADER_START_LSN)
+//	                          << " creator '" << block + LOG_HEADER_CREATOR << "'"
+//	                          << " checksum " << log_block_get_checksum(block);
+//
+//	storage/innobase/include/log0types.h
+//
+//	 */
+//	/** The MySQL 5.7.9 redo log format identifier. We can support recovery
+//	 from this format if the redo log is clean (logically empty). */
+//	LOG_HEADER_FORMAT_5_7_9 = 1,
+//
+//	/** Remove MLOG_FILE_NAME and MLOG_CHECKPOINT, introduce MLOG_FILE_OPEN
+//	redo log record. */
+//	LOG_HEADER_FORMAT_8_0_1 = 2,
+//
+//	/** Allow checkpoint_lsn to point any data byte within redo log (before
+//	it had to point the beginning of a group of log records). */
+//	LOG_HEADER_FORMAT_8_0_3 = 3,
+//	}
+func (parse *Parse) readRedoLogFileHeader(file *os.File) error {
+
+	pos := 0
+	data, err := utils.ReadNextBytes(file, OS_FILE_LOG_BLOCK_SIZE)
+	if err != nil {
+		return err
+	}
+
+	logHeaderFormat := utils.MatchReadFrom4(data[pos:])
+	logs.Debug("LOG_HEADER_FORMAT: ", logHeaderFormat)
+	pos += 4
+
+	logHeaderPAD1 := utils.MatchReadFrom4(data[pos:])
+	logs.Debug("LOG_HEADER_PAD1: ", logHeaderPAD1)
+	pos += 4
+
+	logHeaderStartLsn := utils.MatchReadFrom8(data[pos:])
+	logs.Debug("LOG_HEADER_START_LSN: ", logHeaderStartLsn)
+
+	return err
+}
+
+// Two checkpoint blocks - LOG_CHECKPOINT_1 and LOG_CHECKPOINT_2.
+//	/** First checkpoint field in the log header. We write alternately to
+//	the checkpoint fields when we make new checkpoints. This field is only
+//	defined in the first log file. */
+//	constexpr uint32_t LOG_CHECKPOINT_1 = OS_FILE_LOG_BLOCK_SIZE;
+//
+//	/** Second checkpoint field in the header of the first log file. */
+//	constexpr uint32_t LOG_CHECKPOINT_2 = 3 * OS_FILE_LOG_BLOCK_SIZE;
+func (parse *Parse) readRedoLogFileCheckpoint(file *os.File) error {
+	checkpoint1 := Checkpoint{}
+	err := utils.ReadIntoStruct(file, &checkpoint1, OS_FILE_LOG_BLOCK_SIZE)
+	if err != nil {
+		return err
+	}
+	logs.Debugf("Checkpoint1 Number: 0x%X, LSN: 0x%X, Offset: 0x%d, BufferSize: %d, ArchivedLSN: 0x%X, Checksum1: 0x%X, Checksum2: 0x%X, CurrentFSP: 0x%X, Magic: 0x%X",
+		checkpoint1.Number, checkpoint1.LSN, checkpoint1.Offset, checkpoint1.BufferSize, checkpoint1.ArchivedLSN, checkpoint1.Checksum1, checkpoint1.Checksum2, checkpoint1.CurrentFSP, checkpoint1.Magic)
+
+	utils.ReadNextBytes(file, OS_FILE_LOG_BLOCK_SIZE)
+
+	checkpoint2 := Checkpoint{}
+	err = utils.ReadIntoStruct(file, &checkpoint2, OS_FILE_LOG_BLOCK_SIZE)
+	if err != nil {
+		return err
+	}
+	logs.Debugf("Checkpoint2 Number: 0x%X, LSN: 0x%X, Offset: 0x%d, BufferSize: %d, ArchivedLSN: 0x%X, Checksum1: 0x%X, Checksum2: 0x%X, CurrentFSP: 0x%X, Magic: 0x%X",
+		checkpoint2.Number, checkpoint2.LSN, checkpoint2.Offset, checkpoint2.BufferSize, checkpoint2.ArchivedLSN, checkpoint2.Checksum1, checkpoint2.Checksum2, checkpoint2.CurrentFSP, checkpoint2.Magic)
+	return err
+}
+
+// readRedoBlockHeader read redo log block header.
+//	| block number(4bytes) | block data length(2bytes) | first record offset(2bytes) | checkpoint number(4bytes) |
+//	| log record1 ... | log recordN | free space | checksum(4bytes)
+// log block header is 12 bytes length
+// log block size also 512 bytes
+// last 4 bytes is checksum
+func (parse *Parse) readRedoBlockHeader(pos *uint64, data []byte) (BlockHeader, error) {
+
+	logBlockNo := utils.MatchReadFrom4(data)
+	*pos += 4
+
+	dataLen := utils.MatchReadFrom2(data[*pos:])
+	*pos += 2
+
+	firstRecord := utils.MatchReadFrom2(data[*pos:])
+	*pos += 2
+
+	checkpointNo := utils.MatchReadFrom4(data[*pos:])
+	*pos += 4
+
+	logs.Debugf("RedoBlockHeader logBlockNo: %d, dataLen: %d, firstRecord: %d, checkpointNo: %d\n",
+		logBlockNo, dataLen, firstRecord, checkpointNo)
+
+	blockHeader := BlockHeader{
+		BlockNumber:    uint32(logBlockNo),
+		BlockDataLen:   uint16(dataLen),
+		FirstRecOffset: uint16(firstRecord),
+		CheckpointNum:  uint32(checkpointNo),
+	}
+	// TODO: error always nil
+	return blockHeader, nil
 }
 
 // Parse the redo block data, it consists of many redo records.
@@ -389,123 +497,6 @@ func (parse *Parse) parseRedoBlockData(data []byte) error {
 	return nil
 }
 
-// Parse the redo block header.
-func (parse *Parse) readRedoBlockHeader(pos *uint64, d []byte) (uint64, uint64, error) {
-
-	logBlockNo := utils.MatchReadFrom4(d)
-	*pos += 4
-
-	dataLen := utils.MatchReadFrom2(d[*pos:])
-	*pos += 2
-
-	firstRecord := utils.MatchReadFrom2(d[*pos:])
-	*pos += 2
-
-	checkpointNo := utils.MatchReadFrom4(d[*pos:])
-	*pos += 4
-
-	logs.Debug("==================================")
-	logs.Debug("logBlockNo:", logBlockNo)
-	logs.Debug("dataLen:", dataLen)
-	logs.Debug("firstRecord:", firstRecord)
-	logs.Debug("checkpointNo:", checkpointNo)
-	logs.Debug("==================================")
-	logs.Debug("")
-
-	return dataLen, firstRecord, nil
-}
-
-/*
-storage/innobase/include/log0log.ic
-
-void meb_log_print_file_hdr(byte *block) {
-  ib::info(ER_IB_MSG_626) << "Log file header:"
-                          << " format "
-                          << mach_read_from_4(block + LOG_HEADER_FORMAT)
-                          << " pad1 "
-                          << mach_read_from_4(block + LOG_HEADER_PAD1)
-                          << " start_lsn "
-                          << mach_read_from_8(block + LOG_HEADER_START_LSN)
-                          << " creator '" << block + LOG_HEADER_CREATOR << "'"
-                          << " checksum " << log_block_get_checksum(block);
-}
-*/
-func (parse *Parse) readHeader(file *os.File) error {
-
-	pos := 0
-	data, err := utils.ReadNextBytes(file, OS_FILE_LOG_BLOCK_SIZE)
-	if err != nil {
-		return err
-	}
-
-	// storage/innobase/include/log0types.h
-	///** The MySQL 5.7.9 redo log format identifier. We can support recovery
-	//  from this format if the redo log is clean (logically empty). */
-	//LOG_HEADER_FORMAT_5_7_9 = 1,
-	//
-	///** Remove MLOG_FILE_NAME and MLOG_CHECKPOINT, introduce MLOG_FILE_OPEN
-	//  redo log record. */
-	//	LOG_HEADER_FORMAT_8_0_1 = 2,
-	//
-	///** Allow checkpoint_lsn to point any data byte within redo log (before
-	//  it had to point the beginning of a group of log records). */
-	//	LOG_HEADER_FORMAT_8_0_3 = 3,
-	logHeaderFormat := utils.MatchReadFrom4(data[pos:])
-	logs.Debug("LOG_HEADER_FORMAT: ", logHeaderFormat)
-	pos += 4
-
-	logHeaderPAD1 := utils.MatchReadFrom4(data[pos:])
-	logs.Debug("LOG_HEADER_PAD1: ", logHeaderPAD1)
-	pos += 4
-
-	logHeaderStartLsn := utils.MatchReadFrom8(data[pos:])
-	logs.Debug("LOG_HEADER_START_LSN: ", logHeaderStartLsn)
-
-	return err
-}
-
-func (parse *Parse) readCheckpoint(file *os.File) error {
-
-	checkpoint := Checkpoint{}
-	const cpsize = 512
-	err := utils.ReadIntoStruct(file, &checkpoint, cpsize)
-	if err != nil {
-		return err
-	}
-	//fmt.Println("================================================================================")
-	//fmt.Println("Parsed first checkpoint data:")
-	//fmt.Printf("Number     : 0x%X\n", checkpoint.Number)
-	//fmt.Printf("LSN        : 0x%X\n", checkpoint.LSN)
-	//fmt.Printf("Offset     : 0x%d\n", checkpoint.Offset)
-	//fmt.Printf("BufferSize : %d\n", checkpoint.BufferSize)
-	//fmt.Printf("ArchivedLSN: 0x%X\n", checkpoint.ArchivedLSN)
-	//fmt.Printf("Checksum1  : 0x%X\n", checkpoint.Checksum1)
-	//fmt.Printf("Checksum2  : 0x%X\n", checkpoint.Checksum2)
-	//fmt.Printf("CurrentFSP  : 0x%X\n", checkpoint.CurrentFSP)
-	//fmt.Printf("Magic      : 0x%X\n", checkpoint.Magic)
-
-	checkpoint2 := Checkpoint{}
-	err = utils.ReadIntoStruct(file, &checkpoint2, cpsize)
-	if err != nil {
-		return err
-	}
-	//fmt.Println("================================================================================")
-	//fmt.Println("Parsed second checkpoint data:")
-	//fmt.Printf("Number     : 0x%X\n", checkpoint2.Number)
-	//fmt.Printf("LSN        : 0x%X\n", checkpoint2.LSN)
-	//fmt.Printf("Offset     : 0x%X\n", checkpoint2.Offset)
-	//fmt.Printf("BufferSize : %d\n", checkpoint2.BufferSize)
-	//fmt.Printf("ArchivedLSN: 0x%X\n", checkpoint2.ArchivedLSN)
-	//fmt.Printf("Checksum1  : 0x%X\n", checkpoint2.Checksum1)
-	//fmt.Printf("Checksum2  : 0x%X\n", checkpoint2.Checksum2)
-	//fmt.Printf("CurrentFSP  : 0x%X\n", checkpoint2.CurrentFSP)
-	//fmt.Printf("Magic      : 0x%X\n", checkpoint2.Magic)
-	//fmt.Println()
-	//fmt.Println()
-
-	return nil
-}
-
 func (parse *Parse) getTableBySpaceID(spaceID uint64) (ibdata.Tables, error) {
 	for _, table := range parse.TableMap {
 		if table.SpaceId == spaceID {
@@ -515,11 +506,11 @@ func (parse *Parse) getTableBySpaceID(spaceID uint64) (ibdata.Tables, error) {
 	return ibdata.Tables{}, fmt.Errorf("can't find table")
 }
 
-func (parse *Parse) validateLogHeader(LogType uint64, SpaceID uint64) bool {
+func (parse *Parse) validateLogHeader(logType uint64, spaceID uint64) bool {
 
 	haveType := true
 
-	switch LogType {
+	switch logType {
 	case MLOG_1BYTE, MLOG_2BYTES, MLOG_4BYTES, MLOG_8BYTES:
 	case MLOG_REC_SEC_DELETE_MARK:
 	case MLOG_UNDO_INSERT:
@@ -563,7 +554,7 @@ func (parse *Parse) validateLogHeader(LogType uint64, SpaceID uint64) bool {
 		break
 	}
 
-	//_, err := parse.getTableBySpaceID(SpaceID)
+	//_, err := parse.getTableBySpaceID(spaceID)
 	//if err != nil || !haveType {
 	//	return false
 	//}

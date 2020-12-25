@@ -39,12 +39,19 @@ func TestParseRedoLogs(t *testing.T) {
 	flag.Set("v", "5")
 }
 
-func TestReadHeader(t *testing.T) {
+func TestLogHeader(t *testing.T) {
 	fd, err := os.Open(fixturePath + "/ib_logfile0")
 	if err != nil {
 		t.Error(err.Error())
 	}
-	err = p.readHeader(fd)
+	defer fd.Close()
+
+	err = p.readRedoLogFileHeader(fd)
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	err = p.readRedoLogFileCheckpoint(fd)
 	if err != nil {
 		t.Error(err.Error())
 	}

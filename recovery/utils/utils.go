@@ -480,8 +480,7 @@ func ReadIntoStruct(file *os.File, dest interface{}, size int) error {
 	buffer := bytes.NewBuffer(data)
 	err = binary.Read(buffer, binary.BigEndian, dest)
 	if err != nil {
-		//return errors.Wrap(err, "binary.Read failed")
-		logs.Error("binary.Read file failed, the error is ", err)
+		logs.Error("binary.Read file failed, error: ", err)
 		return err
 	}
 	return nil

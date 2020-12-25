@@ -69,9 +69,21 @@ func Debug(args ...interface{}) {
 	}
 }
 
+func Debugf(format string, args ...interface{}) {
+	if glog.V(glog.Level(LevelDebug)) {
+		glog.Infof(format, args...)
+	}
+}
+
 func Info(args ...interface{}) {
 	if glog.V(glog.Level(LevelInfo)) {
 		glog.Infoln(args...)
+	}
+}
+
+func Infof(format string, args ...interface{}) {
+	if glog.V(glog.Level(LevelInfo)) {
+		glog.Infof(format, args...)
 	}
 }
 
@@ -81,14 +93,32 @@ func Warn(args ...interface{}) {
 	}
 }
 
+func Warnf(format string, args ...interface{}) {
+	if glog.V(glog.Level(LevelWarn)) {
+		glog.Warningf(format, args...)
+	}
+}
+
 func Error(args ...interface{}) {
 	if glog.V(glog.Level(LevelError)) {
 		glog.Errorln(args...)
 	}
 }
 
+func Errorf(format string, args ...interface{}) {
+	if glog.V(glog.Level(LevelError)) {
+		glog.Errorf(format, args...)
+	}
+}
+
 func Fatal(args ...interface{}) {
 	if glog.V(glog.Level(LevelFatal)) {
 		glog.Fatalln(args...)
+	}
+}
+
+func Fatalf(format string, args ...interface{}) {
+	if glog.V(glog.Level(LevelFatal)) {
+		glog.Fatalf(format, args...)
 	}
 }
