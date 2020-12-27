@@ -156,8 +156,7 @@ func (parse *Parse) ParseDataPage(path string, dbName string, tableName string, 
 
 	for _, page := range pages {
 
-		logs.Debug("page.fh.FIL_PAGE_TYPE is ", page.fh.FIL_PAGE_TYPE,
-			"page.fh.FIL_PAGE_OFFSET", page.fh.FIL_PAGE_OFFSET)
+		logs.Debug("page.fh.FIL_PAGE_TYPE is ", page.fh.FIL_PAGE_TYPE, "page.fh.FIL_PAGE_OFFSET", page.fh.FIL_PAGE_OFFSET)
 
 		parse.parsePageHeader(&page)
 
@@ -247,58 +246,53 @@ func (parse *Parse) parseFile(path string) ([]Page, error) {
 }
 
 func (parse *Parse) parseFilHeader(data []byte) (Page, error) {
-
 	var page Page
-	pos := 0
+	var pos int
 
 	// Get index id
-	IndexId := utils.MatchReadFrom8(data[(pos + 38 + 28):])
-	logs.Debug("Index is is ", IndexId)
-	page.ph.PAGE_INDEX_ID = IndexId
+	indexID := utils.MatchReadFrom8(data[(pos + 38 + 28):])
 
 	// Parse Fil Header
-	SpaceId := utils.MatchReadFrom4(data[pos:])
-	logs.Debug("SpaceId:", SpaceId)
-	page.fh.FIL_PAGE_SPACE = SpaceId
+	spaceID := utils.MatchReadFrom4(data[pos:])
 	pos += 4
 
-	PageOffset := utils.MatchReadFrom4(data[pos:])
-	logs.Debug("PageOffset:", PageOffset)
-	page.fh.FIL_PAGE_OFFSET = PageOffset
+	pageOffset := utils.MatchReadFrom4(data[pos:])
 	pos += 4
 
-	PagePrev := utils.MatchReadFrom4(data[pos:])
-	logs.Debug("PagePrev:", PagePrev)
-	page.fh.FIL_PAGE_PREV = PagePrev
+	pagePrev := utils.MatchReadFrom4(data[pos:])
 	pos += 4
 
-	PageNext := utils.MatchReadFrom4(data[pos:])
-	logs.Debug("PagePrev:", PageNext)
-	page.fh.FIL_PAGE_NEXT = PageNext
+	pageNext := utils.MatchReadFrom4(data[pos:])
 	pos += 4
 
-	PageLsn := utils.MatchReadFrom8(data[pos:])
-	logs.Debug("PageLsn:", PageLsn)
-	page.fh.FIL_PAGE_LSN = PageLsn
+	pageLsn := utils.MatchReadFrom8(data[pos:])
 	pos += 8
 
-	PageType := utils.MatchReadFrom2(data[pos:])
-	logs.Debug("PageType:", PageType)
-	page.fh.FIL_PAGE_TYPE = PageType
+	pageType := utils.MatchReadFrom2(data[pos:])
 	pos += 2
 
-	PageFileFlushLsn := utils.MatchReadFrom8(data[pos:])
-	logs.Debug("PageFileFlushLsn:", PageFileFlushLsn)
-	page.fh.FIL_PAGE_LSN = PageFileFlushLsn
+	pageFileFlushLsn := utils.MatchReadFrom8(data[pos:])
 	pos += 8
 
-	PageArchLogNo := utils.MatchReadFrom4(data[pos:])
-	logs.Debug("PageArchLogNo:", PageArchLogNo)
-	page.fh.FIL_PAGE_ARCH_LOG_NO = PageArchLogNo
+	pageArchLogNo := utils.MatchReadFrom4(data[pos:])
 	pos += 4
-
 	page.data = data[pos:]
 
+	logs.Debug("FilHeader IndexID: ", indexID, "SpaceID:", spaceID, "PageOffset:", pageOffset, "PagePrev:", pagePrev, "PageNext:", pageNext,
+		"PageLsn:", pageLsn, "PageType:", pageType, "PageFileFlushLsn:", pageFileFlushLsn, "PageArchLogNo:", pageArchLogNo)
+	page.ph.PAGE_INDEX_ID = indexID
+	page.fh = FilHeader{
+		FIL_PAGE_SPACE:          spaceID,
+		FIL_PAGE_OFFSET:         pageOffset,
+		FIL_PAGE_PREV:           pagePrev,
+		FIL_PAGE_NEXT:           pageNext,
+		FIL_PAGE_LSN:            pageLsn,
+		FIL_PAGE_TYPE:           pageType,
+		FIL_PAGE_FILE_FLUSH_LSN: pageFileFlushLsn,
+		FIL_PAGE_ARCH_LOG_NO:    pageArchLogNo,
+	}
+
+	// TODO: always true
 	return page, nil
 }
 
@@ -686,71 +680,101 @@ func (parse *Parse) parseSysPageHeader(page Page) (Page, error) {
 	return page, nil
 }
 
+// storage/innobase/include/page0types.h
+//	#define PAGE_HEADER                                  \
+//	FSEG_PAGE_DATA /* index page header starts at this \
+//			offset */
+//	/*-----------------------------*/
+//	#define PAGE_N_DIR_SLOTS 0 /* number of slots in page directory */
+//	#define PAGE_HEAP_TOP 2    /* pointer to record heap top */
+//	#define PAGE_N_HEAP                                      \
+//	4                    /* number of records in the heap, \
+//						bit 15=flag: new-style compact page format */
+//	#define PAGE_FREE 6    /* pointer to start of page free record list */
+//	#define PAGE_GARBAGE 8 /* number of bytes in deleted records */
+//	#define PAGE_LAST_INSERT                                                \
+//	10                      /* pointer to the last inserted record, or    \
+//							NULL if this info has been reset by a delete, \
+//							for example */
+//	#define PAGE_DIRECTION 12 /* last insert direction: PAGE_LEFT, ... */
+//	#define PAGE_N_DIRECTION                                            \
+//	14                   /* number of consecutive inserts to the same \
+//						direction */
+//	#define PAGE_N_RECS 16 /* number of user records on the page */
+//	#define PAGE_MAX_TRX_ID                             \
+//	18 /* highest id of a trx which may have modified \
+//		a record on the page; trx_id_t; defined only   \
+//		in secondary indexes and in the insert buffer  \
+//		tree */
+//	#define PAGE_HEADER_PRIV_END                      \
+//	26 /* end of private data structure of the page \
+//		header which are set in a page create */
+//	/*----*/
+//	#define PAGE_LEVEL                                 \
+//	26 /* level of the node in an index tree; the    \
+//		leaf level is the level 0.  This field should \
+//		not be written to after page creation. */
+//	#define PAGE_INDEX_ID                          \
+//	28 /* index id where the page belongs.       \
+//		This field should not be written to after \
+//		page creation. */
 func (parse *Parse) parsePageHeader(page *Page) *Page {
 
 	d := page.data
-	pos := 0
+	var pos int
 
 	pageNDirSlots := utils.MatchReadFrom2(d[pos:])
-	logs.Debug("pageNDirSlots:", pageNDirSlots)
 	page.ph.PAGE_N_DIR_SLOTS = pageNDirSlots
 	pos += 2
 
 	pageHeapTop := utils.MatchReadFrom2(d[pos:])
-	logs.Debug("pageHeapTop:", pageHeapTop)
 	page.ph.PAGE_HEAP_TOP = pageHeapTop
 	pos += 2
 
 	pageNHeap := utils.MatchReadFrom2(d[pos:])
-	logs.Debug("pageNHeap:", pageNHeap)
 	page.ph.PAGE_N_HEAP = pageNHeap
 	pos += 2
 
 	pageFree := utils.MatchReadFrom2(d[pos:])
-	logs.Debug("pageFree:", pageFree)
 	page.ph.PAGE_FREE = pageFree
 	pos += 2
 
 	pageGarBage := utils.MatchReadFrom2(d[pos:])
-	logs.Debug("pageGarBage:", pageGarBage)
 	page.ph.PAGE_GARBAGE = pageGarBage
 	pos += 2
 
 	pageLastInsert := utils.MatchReadFrom2(d[pos:])
-	logs.Debug("pageLastInsert:", pageLastInsert)
 	page.ph.PAGE_LAST_INSERT = pageLastInsert
 	pos += 2
 
-	pageDirecTion := utils.MatchReadFrom2(d[pos:])
-	logs.Debug("pageDirecTion:", pageDirecTion)
-	page.ph.PAGE_DIRECTION = pageDirecTion
+	pageDirection := utils.MatchReadFrom2(d[pos:])
+	page.ph.PAGE_DIRECTION = pageDirection
 	pos += 2
 
-	pageNDirecTion := utils.MatchReadFrom2(d[pos:])
-	logs.Debug("pageNDirecTion:", pageNDirecTion)
-	page.ph.PAGE_N_DIRECTION = pageNDirecTion
+	pageNDirection := utils.MatchReadFrom2(d[pos:])
+	page.ph.PAGE_N_DIRECTION = pageNDirection
 	pos += 2
 
 	pageNRec := utils.MatchReadFrom2(d[pos:])
-	logs.Debug("pageNRec:", pageNRec)
 	page.ph.PAGE_N_RECS = pageNRec
 	pos += 2
 
 	pageMaxTrxID := utils.MatchReadFrom8(d[pos:])
-	logs.Debug("pageMaxTrxID:", pageMaxTrxID)
 	page.ph.PAGE_MAX_TRX_ID = pageMaxTrxID
 	pos += 8
 
 	pageLevel := utils.MatchReadFrom2(d[pos:])
-	logs.Debug("pageLevel:", pageLevel)
 	page.ph.PAGE_LEVEL = pageLevel
 	pos += 2
 
-	pageIndexId := utils.MatchReadFrom2(d[pos:])
-	logs.Debug("pageIndexId:", pageIndexId)
+	// TODO: parseFilHeader, parsePageHeader both have indexID
+	pageIndexID := utils.MatchReadFrom2(d[pos:])
 	pos += 2
-
 	page.data = d[pos:]
+
+	logs.Debug("PageHeader NDirSlots:", pageNDirSlots, "HeapTop:", pageHeapTop, "NHeap:", pageNHeap, "Free:", pageFree,
+		"GarBage:", pageGarBage, "LastInsert:", pageLastInsert, "DirecTion:", pageDirection, "NDirection:", pageNDirection,
+		"NRec:", pageNRec, "MaxTrxID:", pageMaxTrxID, "Level:", pageLevel, "IndexId:", pageIndexID)
 
 	return page
 }
