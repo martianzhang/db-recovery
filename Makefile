@@ -76,3 +76,18 @@ test:
 	done ; exit $$ret
 
 	@echo "test Success!"
+
+.PHONY: test-cli
+test-cli: build
+	@echo "Recovery from MySQL InnoDB data file"
+	./bin/db-recovery recovery FromDataFile \
+		--DBName="test" \
+		--SysDataFile="./cmd/test/fixture/$(MYSQL_RELEASE)_$(MYSQL_VERSION)/ibdata1" \
+		--TableDataFile="./cmd/test/fixture/$(MYSQL_RELEASE)_$(MYSQL_VERSION)/test/test_int.ibd" \
+		--TableName="test_int"
+	@echo "Recovery from MySQL InnoDB redo file"
+	./bin/db-recovery recovery FromRedoFile  \
+		--RedoFile="./cmd/test/fixture/$(MYSQL_RELEASE)_$(MYSQL_VERSION)/ib_logfile0" \
+		--SysDataFile="./cmd/test/fixture/$(MYSQL_RELEASE)_$(MYSQL_VERSION)/ibdata1" \
+		--DBName="test" \
+		--TableName="test_int"

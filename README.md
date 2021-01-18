@@ -1,5 +1,6 @@
-## What is db-recovery?
-```
+# What is db-recovery?
+
+```text
        ____                                                   
   ____/ / /_        ________  _________ _   _____  _______  __
  / __  / __ \______/ ___/ _ \/ ___/ __ \ | / / _ \/ ___/ / / /
@@ -18,11 +19,13 @@ db-recovery is a tool for recovering MySQL data. It is used in scenarios where t
 
   Parsing the redo log is actually in order to parse the undo log in the redo, through the undo log we can get the data before modification, and then parse the data to generate the corresponding update statement.
 
-
 ## Quick start
 
 1.clone the db-recovery repository
-- git clone https://github.com/zbdba/db-recovery.git
+
+```bash
+git clone https://github.com/zbdba/db-recovery.git
+```
 
 2.Install the Golang environment.
 
@@ -30,17 +33,18 @@ db-recovery is a tool for recovering MySQL data. It is used in scenarios where t
 
 - step2: Set the environment variable
 
+```bash
   export GO111MODULE=on
-  
   export GOPROXY=https://goproxy.io
+```
 
 3.Make the db-recovery
-  
+
 - cd db-recovery && make
 
 4.Use the db-recovery help
 
-```
+```bash
 [zbdba@zbdba db-recovery]$ ./bin/db-recovery
 A simple command line client for github.com/zbdba/db-recovery.
 
@@ -63,7 +67,7 @@ Use "github.com/zbdba/db-recovery [command] --help" for more information about a
 
 You identify the command to get help
 
-```
+```bash
 [zbdba@zbdba db-recovery]$ ./bin/db-recovery recovery --help
 recovery related commands
 
@@ -88,18 +92,19 @@ Use "github.com/zbdba/db-recovery recovery [command] --help" for more informatio
 5.Example for db-recovery
 
 - Recovery table type_test.test5 from MySQL InnoDB data file.
-```
+
+```bash
 [root@zbdba db-recovery]# ./bin/db-recovery recovery FromDataFile \
 --DBName="type_test" \
 --SysDataFile="/data/mysql3322/data/ibdata1" \
 --TableDataFile="/data/mysql3322/data/type_test/test5.ibd" \
 --TableName="test5" \
---OpType="RecoveryData" 
+--OpType="RecoveryData"
 ```
 
 - Recovery table type_test.test5 from MySQL InnoDB redo file.
 
-```
+```bash
 ./bin/db-recovery recovery FromRedoFile  \
 --RedoFile="/data/mysql3322/data/ib_logfile0" \
 --SysDataFile="/data/mysql3322/data/ibdata1" \
@@ -108,19 +113,24 @@ Use "github.com/zbdba/db-recovery recovery [command] --help" for more informatio
 ```
 
 ## Roadmap
+
 - Support MySQL 8.0
 - Support analysis of data files and redo log files
 - Support recovery table structure
 - Support compress or encrypt index page
 
 ## License
+
 db-recovery is under the Apache 2.0 license. See the [LICENSE](./LICENSE) file for details.
 
 ## Contributing
+
 Contributions are welcomed and greatly appreciated.
 
 ## Contact
+
 mail:875825800 at qq.com
 
 ## Acknowledgments
+
 Thanks  [undrop-for-innodb](https://github.com/twindb/undrop-for-innodb) and [innodb_ruby](https://github.com/jeremycole/innodb_ruby) for giving me some inspiration and reference.

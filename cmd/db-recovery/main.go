@@ -24,7 +24,7 @@ func main() {
 
 	err := rootCmd.Execute()
 	if err != nil {
-		os.Exit(0)
+		panic(err)
 	}
-	os.Exit(-1)
+	os.Exit(0)
 }

@@ -13,8 +13,6 @@ func (parse *Parse) makeReplaceIntoStatement(AllColumns [][]Columns, table strin
 	var buf bytes.Buffer
 	var query string
 
-	fmt.Println("Print the format sql statement: ")
-
 	for _, columns := range AllColumns {
 
 		buf.WriteString(fmt.Sprintf("replace into `%s`.`%s` values (", database, table))

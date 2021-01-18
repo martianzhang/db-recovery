@@ -24,7 +24,7 @@ type Tables struct {
 	SpaceId   uint64
 }
 
-// Store the table columns info.
+// Columns store the table columns info.
 type Columns struct {
 	FieldName  string
 	FieldType  uint64
@@ -38,7 +38,7 @@ type Columns struct {
 	TableID    uint64
 }
 
-// Store the table index info.
+// Indexes store the table index info.
 type Indexes struct {
 	Id        uint64
 	Name      string
@@ -47,7 +47,7 @@ type Indexes struct {
 	Fields    []*Fields
 }
 
-// Store the fields of the table index.
+// Fields store the fields of the table index.
 type Fields struct {
 	ColumnPos  uint64
 	ColumnName string
@@ -55,7 +55,7 @@ type Fields struct {
 	ColumnValue interface{}
 }
 
-// Store the data dictionary info.
+// DataDict store the data dictionary info.
 type DataDict struct {
 	IndexId    uint64
 	PageOffset uint64
@@ -63,6 +63,7 @@ type DataDict struct {
 	pos        int
 }
 
+// FilHeader ...
 // Name those fields with MySQL code style.
 // It Store the MySQL page file header.
 // Reference https://dev.mysql.com/doc/internals/en/innodb-fil-header.html
@@ -77,6 +78,7 @@ type FilHeader struct {
 	FIL_PAGE_ARCH_LOG_NO    uint64
 }
 
+// PageHeader ...
 // Name those fields with MySQL code style.
 // It Store the MySQL page header, only the index page have this header.
 // Reference https://dev.mysql.com/doc/internals/en/innodb-page-header.html
@@ -97,6 +99,7 @@ type PageHeader struct {
 	PAGE_BTR_SEG_TOP  uint64
 }
 
+// SystemPageHeader ...
 // Name those fields with MySQL code style.
 // It Store the MySQL system page header, only the system page have this header.
 // Reference mysql-5.7.19/storage/innobase/include/dict0boot.h
