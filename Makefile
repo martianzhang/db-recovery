@@ -40,6 +40,7 @@ docker-mysql:
 	@docker stop recovery-mysql 2>/dev/null || true
 	@docker wait recovery-mysql 2>/dev/null >/dev/null || true
 	@echo "docker run --name recovery-mysql $(MYSQL_RELEASE):$(MYSQL_VERSION)"
+	@rm -rf `pwd`/cmd/test/fixture/$(MYSQL_RELEASE)_$(MYSQL_VERSION)
 	@docker run --name recovery-mysql --rm -d \
 	-e MYSQL_ROOT_PASSWORD=123456 \
 	-e MYSQL_DATABASE=test \
@@ -47,7 +48,7 @@ docker-mysql:
 	-v `pwd`/cmd/test/test.sql:/docker-entrypoint-initdb.d/test.sql \
 	-v `pwd`/cmd/test/fixture/$(MYSQL_RELEASE)_$(MYSQL_VERSION):/var/lib/mysql \
 	$(MYSQL_RELEASE):$(MYSQL_VERSION) \
-	--sql-mode ""
+	--sql-mode "NO_ENGINE_SUBSTITUTION"
 	@echo "waiting for earth database initializing "
 	@timeout=180; while [ $${timeout} -gt 0 ] ; do \
 	if ! docker exec recovery-mysql mysql --user=root --password=123456 --host "127.0.0.1" --silent -NBe "do 1" >/dev/null 2>&1 ; then \
