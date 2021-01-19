@@ -35,12 +35,12 @@ func TestParseRedoLogs(t *testing.T) {
 	flag.Set("v", "3")
 	err := p.ParseDictPage(fixturePath + "/ibdata1")
 	if err != nil {
-		t.Error(err.Error())
+		panic(err)
 	}
 
 	err = p.ParseRedoLogs([]string{fixturePath + "/ib_logfile0", fixturePath + "/ib_logfile1"})
 	if err != nil {
-		t.Error(err.Error())
+		panic(err)
 	}
 	flag.Set("v", "5")
 }
@@ -48,17 +48,17 @@ func TestParseRedoLogs(t *testing.T) {
 func TestLogHeader(t *testing.T) {
 	fd, err := os.Open(fixturePath + "/ib_logfile0")
 	if err != nil {
-		t.Error(err.Error())
+		panic(err)
 	}
 	defer fd.Close()
 
 	err = p.readRedoLogFileHeader(fd)
 	if err != nil {
-		t.Error(err.Error())
+		panic(err)
 	}
 
 	err = p.readRedoLogFileCheckpoint(fd)
 	if err != nil {
-		t.Error(err.Error())
+		panic(err)
 	}
 }

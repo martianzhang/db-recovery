@@ -35,12 +35,12 @@ func TestParse(t *testing.T) {
 	flag.Set("v", "3")
 	err := p.ParseDictPage(fixturePath + "/ibdata1")
 	if err != nil {
-		t.Error(err.Error())
+		panic(err)
 	}
 
 	err = p.ParseDataPage(fixturePath+"/ibdata1", "test", "test_int", true)
 	if err != nil {
-		t.Error(err.Error())
+		panic(err)
 	}
 	flag.Set("v", "5")
 }
@@ -49,21 +49,21 @@ func TestParseFile(t *testing.T) {
 	// test parse ibdata
 	pages, err := p.parseFile(fixturePath + "/ibdata1")
 	if err != nil {
-		t.Error(err.Error())
+		panic(err)
 	}
 
 	if len(pages) == 0 {
-		t.Error("no pages found, parse error!")
+		panic("no pages found, parse error!")
 	}
 
 	// test parse ibd
 	pages, err = p.parseFile(fixturePath + "/test/test_int.ibd")
 	if err != nil {
-		t.Error(err.Error())
+		panic(err)
 	}
 
 	if len(pages) == 0 {
-		t.Error("no pages found, parse error!")
+		panic("no pages found, parse error!")
 	}
 }
 
@@ -79,18 +79,18 @@ func TestAddColumns(t *testing.T) {
 	columns = addColumns(columns, 1, Columns{FieldName: "middle"})
 
 	if len(columns) != 3 {
-		t.Error("addColumns count error")
+		panic("addColumns count error")
 	}
 
 	if columns[0].FieldName != "first" {
-		t.Error("addColumns value error")
+		panic("addColumns value error")
 	}
 
 	if columns[1].FieldName != "middle" {
-		t.Error("addColumns value error")
+		panic("addColumns value error")
 	}
 
 	if columns[2].FieldName != "last" {
-		t.Error("addColumns value error")
+		panic("addColumns value error")
 	}
 }

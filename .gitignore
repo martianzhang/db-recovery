@@ -1,6 +1,7 @@
 .idea
 .vscode
 *.log
+coverage.*
 
 bin/
 cmd/test/fixture/

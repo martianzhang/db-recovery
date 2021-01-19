@@ -3,6 +3,12 @@ GIT_SHA=$(shell git rev-parse --short HEAD || echo "GitNotFound")
 BUILD_TIME=$(shell date "+%Y-%m-%d_%H:%M:%S")
 GO_LDFLAGS="-X github.com/zbdba/db-recovery/cmd/recovery/main.GitSHA=${GIT_SHA} -X github.com/zbdba/db-recovery/cmd/recovery/main.BuildTime=${BUILD_TIME}"
 
+# colors compatible setting
+CRED:=$(shell tput setaf 1 2>/dev/null)
+CGREEN:=$(shell tput setaf 2 2>/dev/null)
+CYELLOW:=$(shell tput setaf 3 2>/dev/null)
+CEND:=$(shell tput sgr0 2>/dev/null)
+
 # Add mysql version for testing `MYSQL_RELEASE=percona MYSQL_VERSION=5.7 make docker`
 # MySQL 5.1 `MYSQL_RELEASE=vsamov/mysql-5.1.73 make docker`
 # MYSQL_RELEASE: mysql, percona, mariadb ...
@@ -10,8 +16,6 @@ GO_LDFLAGS="-X github.com/zbdba/db-recovery/cmd/recovery/main.GitSHA=${GIT_SHA} 
 # use mysql:latest as default
 MYSQL_RELEASE := $(or ${MYSQL_RELEASE}, ${MYSQL_RELEASE}, mysql)
 MYSQL_VERSION := $(or ${MYSQL_VERSION}, ${MYSQL_VERSION}, 5.7)
-
-DOCKER_VOLUME=$(shell docker inspect recovery-mysql | jq -r '.[] | .Mounts | .[] | select(.Type == "volume") | .Source')
 
 all: build
 
@@ -77,6 +81,22 @@ test:
 	done ; exit $$ret
 
 	@echo "test Success!"
+
+# Code Coverage
+# colorful coverage numerical >=90% GREEN, <80% RED, Other YELLOW
+.PHONY: cover
+cover: test
+	@echo "$(CGREEN)Run test cover check ...$(CEND)"
+	@go test $(LDFLAGS) -coverpkg=./... -coverprofile=coverage.data ./... | column -t
+	@go tool cover -html=coverage.data -o coverage.html
+	@go tool cover -func=coverage.data -o coverage.txt
+	@tail -n 1 coverage.txt | awk '{sub(/%/, "", $$NF); \
+		if($$NF < 80) \
+			{print "$(CRED)"$$0"%$(CEND)"} \
+		else if ($$NF >= 90) \
+			{print "$(CGREEN)"$$0"%$(CEND)"} \
+		else \
+			{print "$(CYELLOW)"$$0"%$(CEND)"}}'
 
 .PHONY: test-cli
 test-cli: build
