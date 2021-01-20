@@ -44,7 +44,7 @@ docker-mysql:
 	@docker stop recovery-mysql 2>/dev/null || true
 	@docker wait recovery-mysql 2>/dev/null >/dev/null || true
 	@echo "docker run --name recovery-mysql $(MYSQL_RELEASE):$(MYSQL_VERSION)"
-	@rm -rf `pwd`/cmd/test/fixture/$(MYSQL_RELEASE)_$(MYSQL_VERSION)
+	@sudo rm -rf `pwd`/cmd/test/fixture/$(MYSQL_RELEASE)_$(MYSQL_VERSION)
 	@docker run --name recovery-mysql --rm -d \
 	-e MYSQL_ROOT_PASSWORD=123456 \
 	-e MYSQL_DATABASE=test \
@@ -65,6 +65,7 @@ docker-mysql:
 			echo "." ; echo "docker recovery-mysql start timeout(180 s)!" ; exit 1 ; \
 	fi ; \
 	done
+	@sudo chmod a+rx -R `pwd`/cmd/test/fixture/$(MYSQL_RELEASE)_$(MYSQL_VERSION)
 
 .PHONY: docker-connect
 docker-connect:
@@ -72,7 +73,7 @@ docker-connect:
 
 .PHONY: test
 test:
-	@echo "Run all test cases ..."
+	@echo "$(CGREEN)Run all test cases ...$(CEND)"
 	@go test -timeout 10m -race ./recovery/... -mysql-release $(MYSQL_RELEASE) -mysql-version $(MYSQL_VERSION)
 
 	@ret=0 && for d in $$(go list -f '{{if (eq .Name "main")}}{{.ImportPath}}{{end}}' ./... | grep test); do \
@@ -100,13 +101,13 @@ cover: test
 
 .PHONY: test-cli
 test-cli: build
-	@echo "Recovery from MySQL InnoDB data file"
+	@echo "$(CGREEN)Recovery from MySQL InnoDB data file$(CEND)"
 	./bin/db-recovery recovery FromDataFile \
 		--DBName="test" \
 		--SysDataFile="./cmd/test/fixture/$(MYSQL_RELEASE)_$(MYSQL_VERSION)/ibdata1" \
 		--TableDataFile="./cmd/test/fixture/$(MYSQL_RELEASE)_$(MYSQL_VERSION)/test/test_int.ibd" \
 		--TableName="test_int"
-	@echo "Recovery from MySQL InnoDB redo file"
+	@echo "$(CGREEN)Recovery from MySQL InnoDB redo file$(CEND)"
 	./bin/db-recovery recovery FromRedoFile  \
 		--RedoFile="./cmd/test/fixture/$(MYSQL_RELEASE)_$(MYSQL_VERSION)/ib_logfile0" \
 		--SysDataFile="./cmd/test/fixture/$(MYSQL_RELEASE)_$(MYSQL_VERSION)/ibdata1" \
